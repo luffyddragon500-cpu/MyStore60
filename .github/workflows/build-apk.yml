@@ -1,0 +1,93 @@
+name: Build MyStore APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download project
+        uses: actions/checkout@v4
+
+      - name: Extract Android project
+        run: |
+          set -e
+
+          mkdir -p extracted
+
+          ARCHIVE=$(find . -maxdepth 1 -type f \( -name "*.tar.gz" -o -name "*.tgz" -o -name "*.zip" \) | head -n 1)
+
+          if [ -z "$ARCHIVE" ]; then
+            echo "ERROR: Project archive not found."
+            exit 1
+          fi
+
+          echo "Found archive: $ARCHIVE"
+
+          case "$ARCHIVE" in
+            *.tar.gz|*.tgz)
+              tar -xzf "$ARCHIVE" -C extracted
+              ;;
+            *.zip)
+              unzip -q "$ARCHIVE" -d extracted
+              ;;
+          esac
+
+          echo "Project extracted successfully."
+
+      - name: Find Android project
+        run: |
+          set -e
+
+          PROJECT_DIR=$(find extracted -type f -name "gradlew" -print -quit | xargs -r dirname)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: Android Gradle project not found."
+            exit 1
+          fi
+
+          echo "Android project found at: $PROJECT_DIR"
+          echo "$PROJECT_DIR" > project_path.txt
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Build APK
+        run: |
+          set -e
+
+          PROJECT_DIR=$(cat project_path.txt)
+
+          cd "$PROJECT_DIR"
+
+          chmod +x gradlew
+
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Find APK
+        run: |
+          set -e
+
+          APK=$(find extracted -type f -name "*.apk" | head -n 1)
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK not found."
+            exit 1
+          fi
+
+          echo "APK found: $APK"
+          cp "$APK" MyStore.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyStore-APK
+          path: MyStore.apk
