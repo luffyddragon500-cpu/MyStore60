@@ -20,39 +20,23 @@ jobs:
 
           mkdir -p extracted
 
-          ARCHIVE=$(find . -maxdepth 1 -type f \( -name "*.tar.gz" -o -name "*.tgz" -o -name "*.zip" \) | head -n 1)
+          ARCHIVE=$(find . -maxdepth 1 -type f \( -name "*.zip" -o -name "*.tar.gz" -o -name "*.tgz" \) | head -n 1)
 
           if [ -z "$ARCHIVE" ]; then
             echo "ERROR: Project archive not found."
             exit 1
           fi
 
-          echo "Found archive: $ARCHIVE"
+          echo "Found: $ARCHIVE"
 
           case "$ARCHIVE" in
-            *.tar.gz|*.tgz)
-              tar -xzf "$ARCHIVE" -C extracted
-              ;;
             *.zip)
               unzip -q "$ARCHIVE" -d extracted
               ;;
+            *.tar.gz|*.tgz)
+              tar -xzf "$ARCHIVE" -C extracted
+              ;;
           esac
-
-          echo "Project extracted successfully."
-
-      - name: Find Android project
-        run: |
-          set -e
-
-          PROJECT_DIR=$(find extracted -type f -name "gradlew" -print -quit | xargs -r dirname)
-
-          if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: Android Gradle project not found."
-            exit 1
-          fi
-
-          echo "Android project found at: $PROJECT_DIR"
-          echo "$PROJECT_DIR" > project_path.txt
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -60,17 +44,18 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
       - name: Build APK
         run: |
           set -e
 
-          PROJECT_DIR=$(cat project_path.txt)
+          cd extracted
 
-          cd "$PROJECT_DIR"
-
-          chmod +x gradlew
-
-          ./gradlew assembleDebug --no-daemon
+          gradle assembleDebug --no-daemon
 
       - name: Find APK
         run: |
@@ -79,11 +64,12 @@ jobs:
           APK=$(find extracted -type f -name "*.apk" | head -n 1)
 
           if [ -z "$APK" ]; then
-            echo "ERROR: APK not found."
+            echo "ERROR: APK was not generated."
             exit 1
           fi
 
           echo "APK found: $APK"
+
           cp "$APK" MyStore.apk
 
       - name: Upload APK
